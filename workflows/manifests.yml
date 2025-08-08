@@ -1,0 +1,49 @@
+name: Build manifests
+on:
+  push:
+    paths:
+      - 'assets/**'
+      - 'bios.txt'
+      - '.github/workflows/manifests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manifests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate images.json from assets folder
+        shell: bash
+        run: |
+          shopt -s nullglob
+          # Collect image files (case-insensitive extensions), version-sort (OW_2 before OW_10)
+          mapfile -t files < <(printf '%s\n' assets/*.{png,jpg,jpeg,webp,PNG,JPG,JPEG,WEBP} 2>/dev/null | sort -V)
+          printf '[\n' > images.json
+          for i in "${!files[@]}"; do
+            f="${files[$i]}"
+            if [ "$i" -gt 0 ]; then printf ",\n" >> images.json; fi
+            printf "  \"%s\"" "$f" >> images.json
+          done
+          printf "\n]\n" >> images.json
+          echo "Wrote images.json with ${#files[@]} items"
+
+      - name: Generate bios.json from bios.txt (optional)
+        if: hashFiles('bios.txt') != ''
+        run: |
+          node -e "const fs=require('fs');const bios=fs.readFileSync('bios.txt','utf8').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);fs.writeFileSync('bios.json', JSON.stringify(bios,null,2));console.log('bios.json written with', bios.length, 'items');"
+
+      - name: Commit updated manifests
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add images.json bios.json || true
+          git commit -m "Update manifests" || echo "No changes"
+          git push
