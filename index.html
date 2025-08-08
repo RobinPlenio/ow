@@ -14,66 +14,52 @@
   <meta property="og:image" content="assets/OW_1.png" />
   <link rel="icon" href="/favicon.ico" />
   <style>
-    /* Variation D — minimal, playful **separator line** between bio and image */
+    /* Back to the earlier vibe — playful, minimal, split layout */
     :root {
-      --bg: #ffffff;
-      --fg: #0a0a0a;
-      --muted: #6b7280;
-      --hair: #e5e7eb;
-      --acc: #111827;       /* randomized in JS */
+      --bg: #0b0b0b;
+      --fg: #f4f4f5;
+      --muted: #a1a1aa;
+      --hair: #1f2937;
+      --acc: #8b5cf6;     /* randomized in JS */
       --radius: 24px;
       --maxw: 1500px;
       --inset: clamp(12px, 3vw, 48px);
-      --sep: color-mix(in oklab, var(--fg) 14%, transparent); /* thin line color */
     }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg:#0b0b0b; --fg:#f4f4f5; --muted:#a1a1aa; --hair:#1f2937; --sep: rgba(255,255,255,.22); }
+
+    @media (prefers-color-scheme: light) {
+      :root { --bg:#ffffff; --fg:#0a0a0a; --muted:#6b7280; --hair:#e5e7eb; }
     }
 
     html, body { height: 100%; }
     body {
-      margin: 0; color: var(--fg); background: var(--bg);
+      margin: 0; color: var(--fg);
+      background:
+        radial-gradient(900px 600px at 96% 6%, color-mix(in oklab, var(--acc) 4%, transparent), transparent),
+        radial-gradient(700px 460px at 8% 12%, color-mix(in oklab, var(--acc) 6%, transparent), transparent),
+        var(--bg);
       -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
       font: 400 clamp(16px, 1.05vw + .6rem, 20px)/1.55 ui-sans-serif, -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
     }
 
     main { position: relative; min-height: 100svh; display: grid; place-items: center; padding: var(--inset); }
 
-    .frame {
+    .stage {
       width: min(100%, var(--maxw));
       min-height: clamp(560px, 94svh, 1200px);
-      display: grid; gap: clamp(12px, 2.6vw, 36px);
-      grid-template-columns: 64px minmax(300px, 520px) 1px 1fr; /* rail | text | divider | image */
+      display: grid; gap: clamp(16px, 3vw, 48px);
+      grid-template-columns: minmax(300px, 520px) 1fr; /* text | image */
       align-items: start;
     }
 
-    .rail { position: sticky; top: var(--inset); height: fit-content; background: var(--acc); color: #fff;
-      border-radius: 999px; display: grid; place-items: center; padding: 8px 0;
-      writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg);
-      font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
-      box-shadow: 0 0 0 6px color-mix(in oklab, var(--acc) 16%, transparent);
-    }
+    .text { padding-top: clamp(6px, 1vw, 14px); }
+    .kicker { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px 0; }
+    .kicker::after { content: ""; display: block; height: 2px; width: var(--rule, 64px); background: var(--acc); border-radius: 2px; margin-top: 10px; }
 
-    .copy { padding-top: clamp(4px, 1vw, 12px); }
-    .caption { margin: 0 0 10px 0; font-size: 12px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
-
-    .bio { margin: 0; max-width: 38ch; font-size: clamp(20px, 1.15vw + 1rem, 32px); letter-spacing: -.01em; line-height: 1.48;
+    .bio { margin: 0; max-width: 36ch; font-size: clamp(20px, 1.15vw + 1rem, 32px); letter-spacing: -.01em; line-height: 1.5;
       text-wrap: balance; hyphens: auto; hanging-punctuation: first; animation: up .45s ease both; }
-
-    /* ——— playful, minimal separator ——— */
-    .divider { position: relative; align-self: stretch; width: 1px; background: var(--sep); border-radius: 999px; }
-    .divider::after {
-      content: ""; position: absolute; left: 50%; transform: translate(-50%, -50%);
-      top: var(--dot-y, 42%);
-      width: 6px; height: 6px; border-radius: 999px; background: var(--acc);
-      box-shadow: 0 0 0 4px color-mix(in oklab, var(--acc) 12%, transparent);
-      opacity: .9; pointer-events: none;
-    }
 
     .visual { position: relative; border: 1px solid var(--hair); border-radius: var(--radius); overflow: clip; }
     .portrait { width: 100%; height: 100%; object-fit: cover; animation: reveal .9s cubic-bezier(.2,.7,.1,1) both; }
-
-    /* hide the image until the chosen src is preloaded to avoid a flash */
     .portrait.is-loading { opacity: 0; }
 
     .brand { position: fixed; right: 12px; bottom: 12px; color: var(--muted); font-size: 12px; letter-spacing: .06em; }
@@ -83,10 +69,8 @@
 
     @media (prefers-reduced-motion: reduce) { .bio, .portrait { animation: none; } }
 
-    @media (max-width: 1000px) {
-      .frame { grid-template-columns: 1fr; }
-      .rail { position: static; writing-mode: horizontal-tb; transform:none; width: max-content; border-radius: 999px; padding: 6px 10px; box-shadow: none; margin-bottom: 6px; }
-      .divider { display: none; }
+    @media (max-width: 900px) {
+      .stage { grid-template-columns: 1fr; }
       .visual { order: 2; }
       .portrait { aspect-ratio: 1 / 1; height: auto; }
       .brand { position: static; text-align: center; padding-top: 10px; }
@@ -95,13 +79,11 @@
 </head>
 <body>
   <main>
-    <div class="frame">
-      <aside class="rail" aria-hidden="true">ottmarwuselkrug.de</aside>
-      <section class="copy">
-        <p class="caption">Biografie</p>
-        <p class="bio" id="bio">Lade Biografie …</p>
+    <div class="stage" id="stage">
+      <section class="text">
+        <p class="kicker">ottmarwuselkrug.de</p>
+        <p id="bio" class="bio">Lade Biografie …</p>
       </section>
-      <div class="divider" id="divider" aria-hidden="true"></div>
       <section class="visual">
         <img alt="Porträt von Ottmar Wuselkrug" class="portrait is-loading" id="portrait" fetchpriority="high" />
       </section>
@@ -110,7 +92,7 @@
   <div class="brand" aria-hidden="true">Ottmar Wuselkrug</div>
 
   <script>
-    // Manifests override these arrays if present at the repo root.
+    // Fallback content (overridden by bios.json / images.json if present)
     const BIOS = [
       "Ottmar Wuselkrug ist freier Kurator und Publizist mit Fokus auf dokumentarische Positionen und kleine Formen.",
       "Ottmar Wuselkrug (*1970 in Karl-Marx-Stadt) ist DJ für private Anlässe und Autor kürzerer Sachtexte."
@@ -120,11 +102,9 @@
       'assets/OW_1.png','assets/OW_2.png','assets/OW_3.png','assets/OW_4.png','assets/OW_5.png','assets/OW_6.png','assets/OW_7.png'
     ];
 
-    const ACCENTS = ['#111827','#0ea5e9','#10b981','#f43f5e','#8b5cf6','#f59e0b'];
+    const ACCENTS = ['#ff3e00','#0ea5e9','#10b981','#f43f5e','#8b5cf6','#f59e0b'];
 
     const bioEl = document.getElementById('bio');
-    const imgEl = document.getElementById('portrait');
-    const divider = document.getElementById('divider');
 
     function pickIndex(key, len) {
       const last = Number(sessionStorage.getItem(key) ?? -1);
@@ -141,7 +121,7 @@
       if (desc) desc.setAttribute('content', text.slice(0, 160));
       const og = document.querySelector('meta[property="og:description"]');
       if (og) og.setAttribute('content', text.slice(0, 200));
-      document.title = 'O.W. ';
+      document.title = 'O.W.';
     }
 
     async function setImage(url) {
@@ -172,19 +152,14 @@
       const i = pickIndex('accIdx', ACCENTS.length);
       const acc = ACCENTS[i];
       document.documentElement.style.setProperty('--acc', acc);
+      const rule = Math.round(48 + Math.random() * 64) + 'px';
+      document.documentElement.style.setProperty('--rule', rule);
       const theme = document.querySelector('meta[name="theme-color"][media*="light"]');
       if (theme) theme.setAttribute('content', acc);
     }
 
-    function placeDot() {
-      // per-visit playful dot along the divider
-      const y = Math.round(18 + Math.random()*64) + '%';
-      divider && divider.style.setProperty('--dot-y', y);
-    }
-
     (async function init() {
       setAccent();
-      placeDot();
       const [biosMaybe, imgsMaybe] = await Promise.all([
         loadJSON('bios.json'),
         loadJSON('images.json')
