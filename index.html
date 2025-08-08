@@ -58,7 +58,7 @@
     .bio { margin: 0; max-width: 36ch; font-size: clamp(20px, 1.15vw + 1rem, 32px); letter-spacing: -.01em; line-height: 1.5;
       text-wrap: balance; hyphens: auto; hanging-punctuation: first; animation: up .45s ease both; }
 
-    .visual { position: relative; border: 1px solid var(--hair); border-radius: var(--radius); overflow: clip; }
+    .visual { position: relative; border: 1px solid var(--hair); border-radius: var(--radius); overflow: clip; transform: scale(var(--imgScale, .8)); transform-origin: top right; }
     .portrait { width: 100%; height: 100%; object-fit: cover; animation: reveal .9s cubic-bezier(.2,.7,.1,1) both; }
     .portrait.is-loading { opacity: 0; }
 
@@ -71,6 +71,10 @@
 
     @media (max-width: 900px) {
       .stage { grid-template-columns: 1fr; }
+      .visual { order: 2; transform: none; }
+      .portrait { aspect-ratio: 1 / 1; height: auto; }
+      .brand { position: static; text-align: center; padding-top: 10px; }
+    }
       .visual { order: 2; }
       .portrait { aspect-ratio: 1 / 1; height: auto; }
       .brand { position: static; text-align: center; padding-top: 10px; }
@@ -121,7 +125,7 @@
       if (desc) desc.setAttribute('content', text.slice(0, 160));
       const og = document.querySelector('meta[property="og:description"]');
       if (og) og.setAttribute('content', text.slice(0, 200));
-      document.title = 'O.W.';
+      document.title = 'Ottmar Wuselkrug';
     }
 
     async function setImage(url) {
