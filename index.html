@@ -62,7 +62,9 @@
     .portrait { width: 100%; height: 100%; object-fit: cover; animation: reveal .9s cubic-bezier(.2,.7,.1,1) both; }
     .portrait.is-loading { opacity: 0; }
 
-    .brand { position: fixed; right: 12px; bottom: 12px; color: var(--muted); font-size: 12px; letter-spacing: .06em; }
+    .brand { position: fixed; right: 12px; bottom: 12px; color: var(--muted); font-size: 12px; letter-spacing: .06em; text-decoration: none; outline-offset: 2px; }
+    .brand:hover { text-decoration: underline; text-decoration-color: var(--acc); }
+    .brand:focus-visible { outline: 2px solid var(--acc); border-radius: 6px; }
 
     @keyframes up { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none; } }
     @keyframes reveal { from { clip-path: inset(6% round var(--radius)); opacity:.0; } to { clip-path: inset(0 round var(--radius)); opacity:1; } }
@@ -72,10 +74,6 @@
     @media (max-width: 900px) {
       .stage { grid-template-columns: 1fr; }
       .visual { order: 2; transform: none; }
-      .portrait { aspect-ratio: 1 / 1; height: auto; }
-      .brand { position: static; text-align: center; padding-top: 10px; }
-    }
-      .visual { order: 2; }
       .portrait { aspect-ratio: 1 / 1; height: auto; }
       .brand { position: static; text-align: center; padding-top: 10px; }
     }
@@ -93,7 +91,7 @@
       </section>
     </div>
   </main>
-  <div class="brand" aria-hidden="true">Ottmar Wuselkrug</div>
+  <a class="brand" href="mailto:ottmar@ottmarwuselkrug.de" aria-label="E‑Mail an Ottmar Wuselkrug" title="E‑Mail an Ottmar Wuselkrug">ottmar@ottmarwuselkrug.de</a>
 
   <script>
     // Fallback content (overridden by bios.json / images.json if present)
