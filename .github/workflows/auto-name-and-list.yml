@@ -1,107 +1,120 @@
-name: Auto name images & build images.json
+name: Auto move, rename & list images (PR)
 
 on:
-  push:                  # run on any push (any branch)
-    branches: ['**']
-  workflow_dispatch:     # allow manual runs
+  push:
+    branches: ['**']                 # run on any branch
+    paths:
+      - 'assets/**'
+      - '*.png'
+      - '*.jpg'
+      - '*.jpeg'
+      - '*.webp'
+      - '*.avif'
+      - '.github/workflows/auto-name-and-list.yml'
+  workflow_dispatch:                  # allow manual run
 
 permissions:
   contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-images-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  go:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # safer for pushing back
 
-      - name: Debug — show branch and tree
-        run: |
-          echo "EVENT: $GITHUB_EVENT_NAME"
-          echo "REF:   $GITHUB_REF"
-          echo "BRANCH_NAME: ${{ github.ref_name }}"
-          ls -la
-
-      - name: Ensure assets/ exists & move root images in
-        shell: bash
-        run: |
-          mkdir -p assets
-          shopt -s nullglob nocaseglob
-          for f in *.{png,jpg,jpeg,webp,avif}; do
-            [ -f "$f" ] || continue
-            echo "Move $f -> assets/"
-            mv "$f" assets/
-          done
-          echo "Tree after move:"
-          ls -la assets || true
-
-      - name: Rename to OW_### and build images.json
+      - name: Normalize images into assets/ and build images.json
         shell: bash
         run: |
           python3 - << 'PY'
-import os, re, json, time
+import os, re, json, shutil, time
 
+ROOT = "."
 ASSETS = "assets"
 KEEP = {"png","jpg","jpeg","webp","avif"}
-ANY_OW = re.compile(r'^OW_(\d+)\.(png|jpg|jpeg|webp|avif)$', re.I)
+OW_ANY = re.compile(r'^OW_(\d+)\.(png|jpg|jpeg|webp|avif)$', re.I)
 
 os.makedirs(ASSETS, exist_ok=True)
 
-# Collect all images in assets/
-entries = []
-for f in os.listdir(ASSETS):
-    p = os.path.join(ASSETS, f)
-    if os.path.isfile(p) and f.rsplit('.',1)[-1].lower() in KEEP:
-        entries.append((f, os.stat(p).st_mtime))
+# 1) move any images from root -> assets/
+moved=[]
+for f in list(os.listdir(ROOT)):
+    if f.startswith('.') or f in {'.git','.github','assets'}:
+        continue
+    p=os.path.join(ROOT,f)
+    if not os.path.isfile(p): continue
+    ext=f.rsplit('.',1)[-1].lower() if '.' in f else ''
+    if ext in KEEP:
+        dest=os.path.join(ASSETS,f)
+        if os.path.exists(dest):
+            stem, e = os.path.splitext(f)
+            dest=os.path.join(ASSETS, f"{stem}-{int(time.time())}{e}")
+        shutil.move(p,dest)
+        moved.append((f, os.path.basename(dest)))
 
-# Determine used indices from any OW_# pattern
-used = set()
-for f, _ in entries:
-    m = ANY_OW.match(f)
-    if m: used.add(int(m.group(1)))
+# 2) collect existing indices
+used=set()
+entries=[]
+for f in os.listdir(ASSETS):
+    p=os.path.join(ASSETS,f)
+    if not os.path.isfile(p): continue
+    ext=f.rsplit('.',1)[-1].lower() if '.' in f else ''
+    if ext in KEEP:
+        entries.append((f, os.stat(p).st_mtime))
+        m=OW_ANY.match(f)
+        if m:
+            used.add(int(m.group(1)))
+
 next_idx = max(used) if used else 0
 
-# Canonize / rename to OW_###.ext
-changes = []
-for f, mtime in sorted(entries, key=lambda t: t[1]):  # oldest first
-    m = ANY_OW.match(f)
-    p = os.path.join(ASSETS, f)
-    ext = f.rsplit('.',1)[-1].lower()
+# 3) canonize to OW_###.ext (3 digits), oldest first
+changes=[]
+for f, mtime in sorted(entries, key=lambda t:t[1]):
+    p=os.path.join(ASSETS,f)
+    ext=f.rsplit('.',1)[-1].lower()
+    m=OW_ANY.match(f)
     if m:
-        canon = f"OW_{int(m.group(1)):03d}.{ext}"
-        if f != canon and not os.path.exists(os.path.join(ASSETS, canon)):
+        canon=f"OW_{int(m.group(1)):03d}.{ext}"
+        if f!=canon and not os.path.exists(os.path.join(ASSETS, canon)):
             os.rename(p, os.path.join(ASSETS, canon))
             changes.append((f, canon))
     else:
-        next_idx += 1
-        canon = f"OW_{next_idx:03d}.{ext}"
+        next_idx+=1
+        canon=f"OW_{next_idx:03d}.{ext}"
         os.rename(p, os.path.join(ASSETS, canon))
         changes.append((f, canon))
 
-# Build images.json sorted by numeric index
-final = []
+# 4) write images.json sorted by index
+final=[]
 for f in os.listdir(ASSETS):
-    m = ANY_OW.match(f)
+    m=OW_ANY.match(f)
     if m:
         final.append((int(m.group(1)), f))
-final.sort(key=lambda t: t[0])
+final.sort(key=lambda t:t[0])
 
 with open("images.json","w",encoding="utf-8") as fh:
-    json.dump([f"assets/{name}" for _, name in final], fh, indent=2, ensure_ascii=False)
+    json.dump([f"assets/{name}" for _,name in final], fh, indent=2, ensure_ascii=False)
 
+print("Moved:", moved)
 print("Renamed/Canonized:", changes)
 print("Total images:", len(final))
 PY
-          echo "images.json:"
-          cat images.json
 
-      - name: Commit & push (explicit target branch)
-        shell: bash
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add assets images.json
-          git commit -m "Auto-move, canonize names, and update images.json" || echo "No changes"
-          # push explicitly to the branch that triggered the run
-          git push origin HEAD:${{ github.ref_name }}
+      - name: Create pull request with changes
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: auto-move, rename (OW_###) & update images.json"
+          branch: bot/auto-images
+          title: "Auto images: move, rename & update list"
+          body: |
+            This PR was created automatically.
+            - Moved root images into assets/
+            - Canonized names to OW_###.ext
+            - Rebuilt images.json (sorted)
+          add-paths: |
+            assets/**
+            images.json
