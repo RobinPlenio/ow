@@ -1,0 +1,77 @@
+name: Auto name images & build images.json
+
+on:
+  push:
+    paths:
+      - 'assets/**'
+      - '.github/workflows/auto-name-and-list.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rename_and_list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Auto-rename assets and rebuild images.json
+        run: |
+          python3 - << 'PY'
+import os, re, json, sys
+
+ASSETS = "assets"
+KEEP_EXTS = {"png","jpg","jpeg","webp","avif"}
+CANON = re.compile(r'^OW_(\d{3})\.(png|jpg|jpeg|webp|avif)$', re.I)
+
+os.makedirs(ASSETS, exist_ok=True)
+
+# Collect canonical indices already used
+used = set()
+for f in os.listdir(ASSETS):
+    m = CANON.match(f)
+    if m:
+        used.add(int(m.group(1)))
+
+next_idx = max(used) if used else 0
+changes = []
+
+# Rename anything that doesn't match the canonical pattern
+for f in sorted(os.listdir(ASSETS)):
+    if f == "optimized":  # skip derivative folder if you have one
+        continue
+    p = os.path.join(ASSETS, f)
+    if not os.path.isfile(p):
+        continue
+    ext = f.rsplit(".",1)[-1].lower() if "." in f else ""
+    if ext not in KEEP_EXTS:
+        continue
+    if CANON.match(f):
+        continue
+    next_idx += 1
+    new = f"OW_{next_idx:03d}.{ext}"
+    os.rename(p, os.path.join(ASSETS, new))
+    changes.append((f, new))
+
+# Build images.json (sorted by index)
+files = []
+for f in os.listdir(ASSETS):
+    m = CANON.match(f)
+    if m:
+        files.append((int(m.group(1)), f))
+files.sort(key=lambda t: t[0])
+with open("images.json","w",encoding="utf-8") as fh:
+    json.dump([f"assets/{name}" for _, name in files], fh, indent=2, ensure_ascii=False)
+
+print("Renamed:", changes)
+print("Wrote images.json with", len(files), "items.")
+PY
+
+      - name: Commit changes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets images.json || true
+          git commit -m "Auto-rename assets & update images.json" || echo "No changes"
+          git push
