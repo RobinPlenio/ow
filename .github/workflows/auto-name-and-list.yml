@@ -1,10 +1,8 @@
 name: Auto name images & build images.json
-
 on:
   push:
-    paths:
-      - 'assets/**'
-      - '.github/workflows/auto-name-and-list.yml'
+    # run on any push so uploads to root are handled
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -16,80 +14,89 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Debug – list assets before
-        run: |
-          echo "Before:"
-          ls -la assets || echo "No assets folder"
+      - name: Prepare folders
+        run: mkdir -p assets
 
-      - name: Auto-rename assets and rebuild images.json
+      - name: Move + rename + build manifest
         run: |
           python3 - << 'PY'
-import os, re, json, time
+import os, re, json, shutil, time
 
+ROOT = "."
 ASSETS = "assets"
-KEEP_EXTS = {"png","jpg","jpeg","webp","avif"}
+KEEP = {"png","jpg","jpeg","webp","avif"}
 CANON = re.compile(r'^OW_(\d{3})\.(png|jpg|jpeg|webp|avif)$', re.I)
 
 os.makedirs(ASSETS, exist_ok=True)
 
-# Collect all candidate files (flat in assets/, ignore 'optimized' folder)
-candidates = []
-for f in os.listdir(ASSETS):
-    if f.lower() == "optimized":
+# 1) Move any image in repo root into assets/
+moved = []
+for f in list(os.listdir(ROOT)):
+    if f.startswith('.') or f in {'.git','assets','.github'}: 
         continue
-    p = os.path.join(ASSETS, f)
-    if not os.path.isfile(p):
+    p = os.path.join(ROOT, f)
+    if not os.path.isfile(p): 
         continue
-    ext = f.rsplit(".",1)[-1].lower() if "." in f else ""
-    if ext in KEEP_EXTS:
-        candidates.append((p, f, ext, os.stat(p).st_mtime))
+    ext = f.rsplit('.',1)[-1].lower() if '.' in f else ''
+    if ext in KEEP:
+        dest = os.path.join(ASSETS, f)
+        # if name exists, add timestamp suffix before extension
+        if os.path.exists(dest):
+            stem, e = os.path.splitext(f)
+            dest = os.path.join(ASSETS, f"{stem}-{int(time.time())}{e}")
+        shutil.move(p, dest)
+        moved.append((f, os.path.basename(dest)))
 
-# Find already canonical names
+# 2) Collect canonical indices already in assets/
 used = set()
-for _, f, _, _ in candidates:
+for f in os.listdir(ASSETS):
     m = CANON.match(f)
     if m:
         used.add(int(m.group(1)))
-
 next_idx = max(used) if used else 0
 
+# 3) Rename any non-canonical image inside assets/
 changes = []
-# Rename any non-canonical file to next OW_###
-for p, f, ext, mtime in sorted(candidates, key=lambda t: t[3]):  # oldest first
+candidates = []
+for f in os.listdir(ASSETS):
+    if f.lower() == "optimized": 
+        continue
+    p = os.path.join(ASSETS, f)
+    if not os.path.isfile(p): 
+        continue
+    ext = f.rsplit('.',1)[-1].lower() if '.' in f else ''
+    if ext in KEEP:
+        candidates.append((p, f, os.stat(p).st_mtime))
+
+# oldest first for stable ordering
+for p, f, mtime in sorted(candidates, key=lambda t: t[2]):
     if CANON.match(f):
         continue
+    ext = f.rsplit('.',1)[-1].lower()
     next_idx += 1
     new = f"OW_{next_idx:03d}.{ext}"
     os.rename(p, os.path.join(ASSETS, new))
     changes.append((f, new))
 
-# Build images.json (sorted by numeric index)
+# 4) Build images.json sorted by numeric index
 entries = []
 for f in os.listdir(ASSETS):
     m = CANON.match(f)
     if m:
         entries.append((int(m.group(1)), f))
 entries.sort(key=lambda t: t[0])
-
 with open("images.json","w",encoding="utf-8") as fh:
     json.dump([f"assets/{name}" for _, name in entries], fh, indent=2, ensure_ascii=False)
 
-print("Renamed files:", changes)
+print("Moved from root -> assets:", moved)
+print("Renamed in assets:", changes)
 print("Total images:", len(entries))
 PY
-
-      - name: Debug – list assets after & show images.json
-        run: |
-          echo "After:"
-          ls -la assets
-          echo
-          echo "images.json:"
-          cat images.json
 
       - name: Commit changes
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add assets images.json || true
-          git commit -m "Auto-rename assets & update images.json" || echo "No changes"
+          git add assets images.json
+          git commit -m "Auto-move, rename, and update images.json" || echo "No changes"
           git push
