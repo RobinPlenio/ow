@@ -94,87 +94,79 @@
   <a class="brand" href="mailto:ottmar@ottmarwuselkrug.de" aria-label="E‑Mail an Ottmar Wuselkrug" title="E‑Mail an Ottmar Wuselkrug">ottmar@ottmarwuselkrug.de</a>
 
   <script>
-    // Fallback content (overridden by bios.json / images.json if present)
-    const BIOS = [
-      "Ottmar Wuselkrug ist freier Kurator und Publizist mit Fokus auf dokumentarische Positionen und kleine Formen.",
-      "Ottmar Wuselkrug (*1970 in Karl-Marx-Stadt) ist DJ für private Anlässe und Autor kürzerer Sachtexte."
-    ];
+const OWNER = "RobinPlenio";
+const REPO  = "ow";
+const BRANCH = "main";
+const ASSET_PATH = "assets";
 
-    const IMAGES = [
-      'assets/OW_1.png','assets/OW_2.png','assets/OW_3.png','assets/OW_4.png','assets/OW_5.png','assets/OW_6.png','assets/OW_7.png'
-    ];
+function pickIndex(key, len) {
+  const last = Number(sessionStorage.getItem(key) ?? -1);
+  if (len <= 1) return 0;
+  let i = Math.floor(Math.random() * len);
+  if (i === last) i = (i + 1) % len;
+  sessionStorage.setItem(key, i);
+  return i;
+}
 
-    const ACCENTS = ['#ff3e00','#0ea5e9','#10b981','#f43f5e','#8b5cf6','#f59e0b'];
-
-    const bioEl = document.getElementById('bio');
-
-    function pickIndex(key, len) {
-      const last = Number(sessionStorage.getItem(key) ?? -1);
-      if (len <= 1) return 0;
-      let i = Math.floor(Math.random() * len);
-      if (i === last) i = (i + 1) % len;
-      sessionStorage.setItem(key, i);
-      return i;
+async function listAssets() {
+  // Try local manifest first
+  try {
+    const r = await fetch("images.json", {cache:"no-store"});
+    if (r.ok) {
+      const arr = await r.json();
+      if (Array.isArray(arr) && arr.length) return arr;
     }
+  } catch {}
 
-    function setBio(text) {
-      bioEl.textContent = text;
-      const desc = document.querySelector('meta[name="description"]');
-      if (desc) desc.setAttribute('content', text.slice(0, 160));
-      const og = document.querySelector('meta[property="og:description"]');
-      if (og) og.setAttribute('content', text.slice(0, 200));
-      document.title = 'O.W. ';
-    }
+  // Fallback: live list from GitHub
+  const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${ASSET_PATH}?ref=${BRANCH}`;
+  const r = await fetch(url, {headers:{Accept:"application/vnd.github+json"}, cache:"no-store"});
+  if (!r.ok) return null;
+  const data = await r.json();
+  return data
+    .filter(x => x.type === "file" && /\.(png|jpe?g|webp|avif)$/i.test(x.name))
+    .map(x => `${ASSET_PATH}/${x.name}`)
+    .sort();
+}
 
-    async function setImage(url) {
-      const img = document.getElementById('portrait');
-      if (!img) return;
-      img.classList.add('is-loading');
+async function setImage(url) {
+  const img = document.getElementById("portrait");
+  img.classList.add("is-loading");
+  const pre = new Image();
+  pre.fetchPriority = "high";
+  pre.decoding = "async";
+  await new Promise(res => { pre.onload = res; pre.onerror = res; pre.src = url; });
+  img.src = url;
+  img.classList.remove("is-loading");
+  const og = document.querySelector('meta[property="og:image"]');
+  if (og) og.setAttribute("content", url);
+}
 
-      // Preload to avoid showing any default image
-      const pre = new Image();
-      pre.fetchPriority = 'high';
-      pre.decoding = 'async';
-      const loaded = new Promise((res, rej) => { pre.onload = res; pre.onerror = rej; });
-      pre.src = url;
-      try { await loaded; } catch (_) {}
+function setBio(text) {
+  const bioEl = document.getElementById("bio");
+  bioEl.textContent = text;
+  const desc = document.querySelector('meta[name="description"]');
+  if (desc) desc.setAttribute("content", text.slice(0,160));
+  const og = document.querySelector('meta[property="og:description"]');
+  if (og) og.setAttribute("content", text.slice(0,200));
+  document.title = "Ottmar Wuselkrug";
+}
 
-      img.src = url;
-      img.classList.remove('is-loading');
+(async function init(){
+  // bios: keep whatever you already had
+  let bios = null;
+  try {
+    const r = await fetch("bios.json", {cache:"no-store"});
+    if (r.ok) bios = await r.json();
+  } catch {}
+  bios = Array.isArray(bios) && bios.length ? bios : [
+    "Ottmar Wuselkrug ist freier Kurator und Publizist mit Fokus auf dokumentarische Positionen und kleine Formen."
+  ];
+  setBio(bios[pickIndex("bio", bios.length)]);
 
-      const ogImg = document.querySelector('meta[property="og:image"]');
-      if (ogImg) ogImg.setAttribute('content', url);
-    }
+  const imgs = await listAssets();
+  if (!imgs || !imgs.length) return;  // nothing found
+  await setImage(imgs[pickIndex("img", imgs.length)]);
+})();
+</script>
 
-    async function loadJSON(path) {
-      try { const res = await fetch(path, { cache: 'no-store' }); if (!res.ok) return null; const arr = await res.json(); return Array.isArray(arr) ? arr.filter(Boolean) : null; } catch { return null; }
-    }
-
-    function setAccent() {
-      const i = pickIndex('accIdx', ACCENTS.length);
-      const acc = ACCENTS[i];
-      document.documentElement.style.setProperty('--acc', acc);
-      const rule = Math.round(48 + Math.random() * 64) + 'px';
-      document.documentElement.style.setProperty('--rule', rule);
-      const theme = document.querySelector('meta[name="theme-color"][media*="light"]');
-      if (theme) theme.setAttribute('content', acc);
-    }
-
-    (async function init() {
-      setAccent();
-      const [biosMaybe, imgsMaybe] = await Promise.all([
-        loadJSON('bios.json'),
-        loadJSON('images.json')
-      ]);
-      const bios = biosMaybe || BIOS;
-      const imgs = imgsMaybe || IMAGES;
-
-      const bi = pickIndex('lastBioIdx', bios.length);
-      const ii = pickIndex('lastImgIdx', imgs.length);
-
-      setBio(bios[bi]);
-      setImage(imgs[ii]);
-    })();
-  </script>
-</body>
-</html>
