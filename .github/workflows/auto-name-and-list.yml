@@ -16,10 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Debug – list assets before
+        run: |
+          echo "Before:"
+          ls -la assets || echo "No assets folder"
+
       - name: Auto-rename assets and rebuild images.json
         run: |
           python3 - << 'PY'
-import os, re, json, sys
+import os, re, json, time
 
 ASSETS = "assets"
 KEEP_EXTS = {"png","jpg","jpeg","webp","avif"}
@@ -27,26 +32,30 @@ CANON = re.compile(r'^OW_(\d{3})\.(png|jpg|jpeg|webp|avif)$', re.I)
 
 os.makedirs(ASSETS, exist_ok=True)
 
-# Collect canonical indices already used
-used = set()
+# Collect all candidate files (flat in assets/, ignore 'optimized' folder)
+candidates = []
 for f in os.listdir(ASSETS):
-    m = CANON.match(f)
-    if m:
-        used.add(int(m.group(1)))
-
-next_idx = max(used) if used else 0
-changes = []
-
-# Rename anything that doesn't match the canonical pattern
-for f in sorted(os.listdir(ASSETS)):
-    if f == "optimized":  # skip derivative folder if you have one
+    if f.lower() == "optimized":
         continue
     p = os.path.join(ASSETS, f)
     if not os.path.isfile(p):
         continue
     ext = f.rsplit(".",1)[-1].lower() if "." in f else ""
-    if ext not in KEEP_EXTS:
-        continue
+    if ext in KEEP_EXTS:
+        candidates.append((p, f, ext, os.stat(p).st_mtime))
+
+# Find already canonical names
+used = set()
+for _, f, _, _ in candidates:
+    m = CANON.match(f)
+    if m:
+        used.add(int(m.group(1)))
+
+next_idx = max(used) if used else 0
+
+changes = []
+# Rename any non-canonical file to next OW_###
+for p, f, ext, mtime in sorted(candidates, key=lambda t: t[3]):  # oldest first
     if CANON.match(f):
         continue
     next_idx += 1
@@ -54,19 +63,28 @@ for f in sorted(os.listdir(ASSETS)):
     os.rename(p, os.path.join(ASSETS, new))
     changes.append((f, new))
 
-# Build images.json (sorted by index)
-files = []
+# Build images.json (sorted by numeric index)
+entries = []
 for f in os.listdir(ASSETS):
     m = CANON.match(f)
     if m:
-        files.append((int(m.group(1)), f))
-files.sort(key=lambda t: t[0])
-with open("images.json","w",encoding="utf-8") as fh:
-    json.dump([f"assets/{name}" for _, name in files], fh, indent=2, ensure_ascii=False)
+        entries.append((int(m.group(1)), f))
+entries.sort(key=lambda t: t[0])
 
-print("Renamed:", changes)
-print("Wrote images.json with", len(files), "items.")
+with open("images.json","w",encoding="utf-8") as fh:
+    json.dump([f"assets/{name}" for _, name in entries], fh, indent=2, ensure_ascii=False)
+
+print("Renamed files:", changes)
+print("Total images:", len(entries))
 PY
+
+      - name: Debug – list assets after & show images.json
+        run: |
+          echo "After:"
+          ls -la assets
+          echo
+          echo "images.json:"
+          cat images.json
 
       - name: Commit changes
         run: |
